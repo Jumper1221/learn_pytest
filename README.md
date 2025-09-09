@@ -55,8 +55,7 @@
 
 ### 1. Клонирование репозитория
 ```bash
-git clone <URL вашего репозитория>
-cd fastapi_testing_project
+git clone https://github.com/Jumper1221/learn_pytest.git
 ```
 
 ### 2. Установка зависимостей
