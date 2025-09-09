@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Урок 3: Продвинутые фикстуры и работа с БД</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Roboto+Mono&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.7;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2em;
+            padding: 2em;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1,
+        h2,
+        h3,
+        h4 {
+            font-weight: 700;
+            color: #0056b3;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            border-bottom: none;
+        }
+
+        h2 {
+            font-size: 2em;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: #17a2b8;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        h4 {
+            font-size: 1.2em;
+            color: #6c757d;
+            border-bottom: none;
+        }
+
+        code {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #e9ecef;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: #f1f3f5;
+            border-radius: 5px;
+            padding: 1em;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 0.95em;
+        }
+
+        .code-header {
+            background-color: #343a40;
+            color: #ffffff;
+            padding: 0.5em 1em;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .code-block {
+            margin-bottom: 1.5em;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .bash .code-header::before {
+            content: '$ ';
+            color: #6c757d;
+        }
+
+        .alert {
+            padding: 1em;
+            margin-bottom: 1em;
+            border: 1px solid transparent;
+            border-radius: .25rem;
+        }
+
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+        }
+
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+
+        strong {
+            color: #c7254e;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Курс: Тестирование FastAPI с Pytest</h1>
+        <h2>Урок 3: Продвинутые фикстуры и работа с базой данных</h2>
+        <p>На этом уроке мы совершим ключевой переход: от тестов с фейковыми данными в памяти к полноценным
+            интеграционным тестам с настоящей базой данных. Мы изучим <strong>фикстуры Pytest</strong> — мощнейший
+            инструмент для управления состоянием тестов и обеспечения их полной изоляции.</p>
+
+        <h3>Шаг 1: Проблема и решение — Фикстуры Pytest</h3>
+        <p>Тесты, изменяющие данные (POST, PUT, DELETE), могут влиять друг на друга. Если один тест добавит запись,
+            другой тест, который ожидает пустое состояние, провалится. Фикстуры решают эту проблему, подготавливая
+            окружение для каждого теста в известном, предсказуемом состоянии.</p>
+        <div class="alert alert-warning">
+            <strong>Ключевая идея:</strong> Каждый тест должен работать с чистой, свежей базой данных (или, точнее, с
+            чистой транзакцией), как будто он единственный тест в мире.
+        </div>
+
+        <h3>Шаг 2: Рефакторинг приложения для работы с SQLAlchemy</h3>
+        <p>Сначала перепишем наше приложение, чтобы оно использовало асинхронную SQLAlchemy вместо фейкового списка.</p>
+
+        <h4>1. Создаем модели SQLAlchemy</h4>
+        <p>Создайте новый файл <code>src/models.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">src/models.py</div>
+            <pre><code>from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy import String
+
+class Base(DeclarativeBase):
+    pass
+
+class Item(Base):
+    __tablename__ = "items"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), index=True)
+    description: Mapped[str | None]</code></pre>
+        </div>
+
+        <h4>2. Создаем Pydantic схемы</h4>
+        <p>Создайте новый файл <code>src/schemas.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">src/schemas.py</div>
+            <pre><code>from pydantic import BaseModel, ConfigDict
+
+class ItemBase(BaseModel):
+    name: str
+    description: str | None = None
+
+class ItemCreate(ItemBase):
+    pass
+
+class ItemRead(ItemBase):
+    id: int
+    
+    model_config = ConfigDict(from_attributes=True)</code></pre>
+        </div>
+
+        <h4>3. Настраиваем подключение к БД</h4>
+        <p>Создайте новый файл <code>src/database.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">src/database.py</div>
+            <pre><code>from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from config import settings
+
+engine = create_async_engine(settings.DATABASE_URL)
+async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
+
+async def get_async_session():
+    async with async_session_maker() as session:
+        yield session</code></pre>
+        </div>
+
+        <h4>4. Обновляем основной файл приложения</h4>
+        <p>Замените всю логику <code>fake_items_db</code> в <code>src/main.py</code> на работу с SQLAlchemy.</p>
+        <div class="code-block">
+            <div class="code-header">src/main.py</div>
+            <pre><code>from fastapi import FastAPI, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from typing import List
+
+from database import get_async_session
+from models import Item
+from schemas import ItemCreate, ItemRead
+
+app = FastAPI(title="My FastAPI Testing App")
+
+@app.post("/items/", response_model=ItemRead, status_code=status.HTTP_21_CREATED)
+async def create_item(item: ItemCreate, db: AsyncSession = Depends(get_async_session)):
+    db_item = Item(name=item.name, description=item.description)
+    db.add(db_item)
+    await db.commit()
+    await db.refresh(db_item)
+    return db_item
+
+@app.get("/items/", response_model=List[ItemRead])
+async def read_items(skip: int = 0, limit: int = 10, db: AsyncSession = Depends(get_async_session)):
+    result = await db.execute(select(Item).offset(skip).limit(limit))
+    items = result.scalars().all()
+    return items
+
+@app.get("/items/{item_id}", response_model=ItemRead)
+async def read_item(item_id: int, db: AsyncSession = Depends(get_async_session)):
+    result = await db.execute(select(Item).where(Item.id == item_id))
+    db_item = result.scalar_one_or_none()
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return db_item</code></pre>
+        </div>
+        <div class="alert alert-danger">
+            <strong>Важный момент:</strong> Мы намеренно убрали эндпоинты <code>/</code> и <code>/healthcheck</code>,
+            чтобы сфокусироваться на CRUD-операциях. Не забудьте удалить старые тесты для них из
+            <code>tests/test_api.py</code>.
+        </div>
+
+        <h3>Шаг 3: Создание файла <code>conftest.py</code> и фикстур для БД</h3>
+        <p><code>pytest</code> имеет специальный файл <code>tests/conftest.py</code>. Все фикстуры, определенные в нем,
+            становятся автоматически доступны для всех тестов. Это идеальное место для наших фикстур работы с БД. Этот
+            код — финальная, рабочая версия, учитывающая все исправления, которые мы делали.</p>
+        <div class="code-block">
+            <div class="code-header">tests/conftest.py</div>
+            <pre><code>import asyncio
+import pytest
+import pytest_asyncio
+from typing import AsyncGenerator
+
+from fastapi import FastAPI
+from httpx import AsyncClient, ASGITransport
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import NullPool
+
+from database import get_async_session
+from models import Base
+from main import app as fastapi_app
+from config import settings
+
+# Используем URL тестовой базы данных и NullPool для надежности
+test_engine = create_async_engine(settings.DATABASE_URL, poolclass=NullPool)
+test_async_session_maker = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+
+# Фикстура для создания и очистки таблиц в БД (один раз за сессию)
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def prepare_database():
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
+# Фикстура, создающая новую сессию в транзакции для КАЖДОГО теста
+@pytest_asyncio.fixture(scope="function")
+async def session() -> AsyncGenerator[AsyncSession, None]:
+    async with test_engine.connect() as connection:
+        await connection.begin()
+        async with test_async_session_maker(bind=connection) as session:
+            yield session
+        await connection.rollback() # Откатываем транзакцию после теста
+
+# Фикстура, предоставляющая наше приложение с подмененной зависимостью
+@pytest.fixture(scope="function")
+def app(session: AsyncSession) -> FastAPI:
+    def override_get_session():
+        yield session
+    
+    fastapi_app.dependency_overrides[get_async_session] = override_get_session
+    return fastapi_app
+
+# Стандартная фикстура для event loop
+@pytest.fixture(scope="session")
+def event_loop(request):
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+# Фикстура, предоставляющая асинхронный клиент для каждого теста
+@pytest_asyncio.fixture(scope="function")
+async def client(app: FastAPI) -> AsyncGenerator[AsyncClient, None]:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        yield client
+</code></pre>
+        </div>
+
+        <h3>Шаг 4: Написание асинхронных API-тестов</h3>
+        <p>Теперь мы можем написать тесты, которые полностью изолированы друг от друга. Обновим наш файл
+            <code>tests/test_api.py</code>, сделав его полностью асинхронным и удалив старые тесты.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_api.py</div>
+            <pre><code>import pytest
+from httpx import AsyncClient
+
+# Помечаем все тесты в этом файле как асинхронные
+pytestmark = pytest.mark.asyncio
+
+async def test_create_item(client: AsyncClient):
+    """Тестируем создание элемента."""
+    response = await client.post("/items/", json={"name": "Test Item", "description": "This is a test item"})
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "Test Item"
+    assert "id" in data
+
+async def test_read_items_empty(client: AsyncClient):
+    """Тестируем чтение пустого списка элементов."""
+    response = await client.get("/items/")
+    assert response.status_code == 200
+    assert response.json() == []
+
+async def test_read_items_with_data(client: AsyncClient):
+    """Тестируем чтение списка с одним элементом."""
+    await client.post("/items/", json={"name": "Item 1", "description": "First"})
+    
+    response = await client.get("/items/")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "Item 1"
+
+async def test_read_specific_item(client: AsyncClient):
+    """Тестируем чтение конкретного элемента."""
+    create_response = await client.post("/items/", json={"name": "Specific Item"})
+    item_id = create_response.json()["id"]
+
+    read_response = await client.get(f"/items/{item_id}")
+    assert read_response.status_code == 200
+    data = read_response.json()
+    assert data["id"] == item_id
+    assert data["name"] == "Specific Item"
+
+async def test_read_non_existent_item(client: AsyncClient):
+    """Тестируем чтение несуществующего элемента."""
+    response = await client.get("/items/9999")
+    assert response.status_code == 404
+</code></pre>
+        </div>
+
+        <h3>Шаг 5: Запуск тестов</h3>
+        <p>Запустите тесты из корневой директории проекта. Теперь они будут работать с настоящей тестовой базой данных!
+        </p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry run pytest</code></pre>
+        </div>
+        <p>Вы увидите, как <code>pytest</code> выполняет ваши новые тесты. Благодаря нашей фикстуре, которая откатывает
+            транзакцию, каждый тест начинается с абсолютно чистой базы данных, что гарантирует их надежность и
+            независимость.</p>
+
+        <h3>Итоги урока</h3>
+        <p>Это был самый сложный, но и самый важный урок. Вы научились:</p>
+        <ul>
+            <li>Освоили фикстуры <code>pytest</code> и их области видимости (<code>scope</code>).</li>
+            <li>Настраивать тестовое окружение для базы данных, которое создается и уничтожается автоматически.</li>
+            <li>Использовать механизм <strong>переопределения зависимостей</strong> (<code>dependency_overrides</code>)
+                в FastAPI.</li>
+            <li>Писать полноценные <strong>асинхронные интеграционные тесты</strong> для CRUD-операций.</li>
+            <li>Обеспечивать <strong>полную изоляцию тестов</strong> с помощью транзакций.</li>
+        </ul>
+        <p>Теперь у вас есть надежный фундамент для тестирования любого FastAPI-приложения с базой данных.</p>
+    </div>
+
+</body>
+
+</html>

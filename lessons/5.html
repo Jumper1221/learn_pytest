@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Урок 5: Мокирование зависимостей</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Roboto+Mono&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.7;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2em;
+            padding: 2em;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-weight: 700;
+            color: #0056b3;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            border-bottom: none;
+        }
+
+        h2 {
+            font-size: 2em;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: #17a2b8;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        code {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #e9ecef;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: #f1f3f5;
+            border-radius: 5px;
+            padding: 1em;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 0.95em;
+        }
+
+        .code-header {
+            background-color: #343a40;
+            color: #ffffff;
+            padding: 0.5em 1em;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .code-block {
+            margin-bottom: 1.5em;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .bash .code-header::before {
+            content: '$ ';
+            color: #6c757d;
+        }
+
+        .alert {
+            padding: 1em;
+            margin-bottom: 1em;
+            border: 1px solid transparent;
+            border-radius: .25rem;
+        }
+
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+        }
+
+        strong {
+            color: #c7254e;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Курс: Тестирование FastAPI с Pytest</h1>
+        <h2>Урок 5: Мокирование зависимостей и асинхронное тестирование</h2>
+        <p>В этом заключительном уроке мы рассмотрим одну из самых мощных техник в арсенале тестировщика —
+            <strong>мокирование</strong> (mocking). Она позволяет нам изолировать код от внешних зависимостей (например,
+            вызовов API, работы с файлами, отправки email), делая тесты быстрыми, надежными и предсказуемыми.</p>
+
+        <h3>Шаг 1: Что такое мокирование и зачем оно нужно?</h3>
+        <p>Представьте, что наш сервис при создании товара должен обращаться к внешнему API, чтобы получить текущий курс
+            валют. Если мы будем тестировать эту функцию "вживую", наши тесты станут:</p>
+        <ul>
+            <li><strong>Медленными:</strong> из-за реального сетевого запроса.</li>
+            <li><strong>Ненадежными:</strong> внешний API может быть недоступен.</li>
+            <li><strong>Непредсказуемыми:</strong> курс валют постоянно меняется.</li>
+            <li><strong>Неполными:</strong> мы не сможем легко проверить, как наша система поведет себя, если внешний
+                API вернет ошибку.</li>
+        </ul>
+        <p><strong>Мокирование</strong> решает все эти проблемы. Мы заменяем реальную функцию, которая делает сетевой
+            запрос, на "подделку" (мок), которая мгновенно возвращает заранее определенное нами значение.</p>
+
+        <h3>Шаг 2: Подготовка приложения</h3>
+        <p>Давайте добавим в наше приложение зависимость от внешнего API.</p>
+
+        <h4>1. Имитируем внешний сервис</h4>
+        <p>Создайте новый файл <code>src/currency_converter.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">src/currency_converter.py</div>
+            <pre><code>import asyncio
+    
+# В реальном приложении здесь был бы httpx-клиент и запрос к API
+async def get_usd_to_eur_rate() -> float:
+    """
+    Имитирует асинхронный вызов к внешнему API для получения курса валют.
+    """
+    print("Calling external currency API...")
+    await asyncio.sleep(1) # Имитируем задержку сети
+    print("...external API call finished.")
+    return 0.95 # Возвращаем "сегодняшний" курс</code></pre>
+        </div>
+
+        <h4>2. Обновляем модель и схемы</h4>
+        <p>Добавим новое поле <code>price_eur</code> в нашу модель SQLAlchemy и схему Pydantic.</p>
+        <div class="code-block">
+            <div class="code-header">src/models.py (дополнить)</div>
+            <pre><code>from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Float
+
+# ...
+class Item(Base):
+    # ... (старые поля)
+    price_eur: Mapped[float | None] = mapped_column(Float, nullable=True)</code></pre>
+        </div>
+        <div class="code-block">
+            <div class="code-header">src/schemas.py (дополнить)</div>
+            <pre><code># ...
+class ItemRead(ItemBase):
+    id: int
+    price_eur: float | None = None # Новое поле
+    
+    model_config = ConfigDict(from_attributes=True)</code></pre>
+        </div>
+
+        <h4>3. Обновляем сервисный слой</h4>
+        <p>Изменим сервис <code>create_new_item</code> так, чтобы он использовал наш конвертер валют и обрабатывал
+            возможные ошибки.</p>
+        <div class="code-block">
+            <div class="code-header">src/services.py (обновить функцию)</div>
+            <pre><code>import currency_converter # Добавить импорт
+
+# ...
+
+async def create_new_item(item_data: ItemCreate, db: AsyncSession) -> Item:
+    """Создает новый элемент и обогащает его данными из внешнего API."""
+    db_item = Item(name=item_data.name, description=item_data.description)
+    
+    try:
+        # Пытаемся получить данные
+        rate = await currency_converter.get_usd_to_eur_rate()
+        # Предположим, что цена в долларах - это длина имени :)
+        price_usd = len(db_item.name) 
+        db_item.price_eur = round(price_usd * rate, 2)
+    except Exception as e:
+        # Если внешний сервис вернул ошибку, логируем ее (в реальном проекте)
+        # и просто не устанавливаем цену в евро.
+        print(f"Could not fetch currency rate: {e}")
+        db_item.price_eur = None
+
+    db.add(db_item)
+    await db.commit()
+    await db.refresh(db_item)
+    return db_item</code></pre>
+        </div>
+
+        <h3>Шаг 3: Установка <code>pytest-mock</code></h3>
+        <p><code>pytest</code> отлично интегрируется со стандартной библиотекой <code>unittest.mock</code> через плагин
+            <code>pytest-mock</code>.</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry add --group dev pytest-mock</code></pre>
+        </div>
+        <p>Этот плагин предоставляет удобную фикстуру <code>mocker</code>, которую мы можем использовать в наших тестах.
+        </p>
+
+        <h3>Шаг 4: Написание юнит-тестов с моками</h3>
+        <p>Теперь протестируем наш сервис <code>create_new_item</code> в изоляции от <code>currency_converter</code>.
+            Дополним наш файл <code>tests/test_services.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_services.py (дополнить)</div>
+            <pre><code>from pytest_mock import MockerFixture
+
+# ... (остальные тесты)
+
+async def test_create_new_item_with_mocked_currency(
+    session: AsyncSession, 
+    mocker: MockerFixture
+):
+    """
+    Тестируем создание элемента, мокируя вызов к внешнему API.
+    """
+    # 1. Настраиваем мок: "патчим" функцию там, где она ИСПОЛЬЗУЕТСЯ
+    mock_get_rate = mocker.patch(
+        "services.currency_converter.get_usd_to_eur_rate",
+        return_value=0.9
+    )
+
+    item_data = ItemCreate(name="My Item", description="A valuable item")
+    
+    # 2. Вызываем наш сервис
+    new_item = await services.create_new_item(item_data=item_data, db=session)
+
+    # 3. Проверяем результат
+    # Длина имени "My Item" = 7. 7 * 0.9 = 6.3
+    assert new_item.price_eur == 6.3
+    assert new_item.name == "My Item"
+    
+    # 4. Проверяем, что мок был вызван
+    mock_get_rate.assert_called_once()
+
+
+async def test_create_item_when_currency_api_fails(
+    session: AsyncSession, 
+    mocker: MockerFixture
+):
+    """
+    Тестируем, что цена не будет установлена, если API валют вернет ошибку.
+    """
+    # Настраиваем мок, чтобы он вызывал исключение при вызове
+    mocker.patch(
+        "services.currency_converter.get_usd_to_eur_rate",
+        side_effect=Exception("API is down!")
+    )
+    
+    item_data = ItemCreate(name="Another Item", description="Will it work?")
+    
+    new_item = await services.create_new_item(item_data=item_data, db=session)
+    
+    # Проверяем, что цена не установилась, и товар все равно создался
+    assert new_item.price_eur is None
+    assert new_item.name == "Another Item"</code></pre>
+        </div>
+        <div class="alert alert-warning">
+            <strong>Важный принцип мокирования:</strong> Мы "патчим" (заменяем) объект там, где он
+            <strong>используется</strong> (<code>services.currency_converter...</code>), а не там, где он
+            <strong>определен</strong> (<code>currency_converter...</code>).
+        </div>
+
+        <h3>Шаг 5: Финальный запуск</h3>
+        <p>Запустите все тесты. Теперь, когда наш сервис стал более отказоустойчивым, все тесты, включая тесты на
+            обработку ошибок, должны пройти успешно.</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry run pytest</code></pre>
+        </div>
+
+        <div class="alert alert-success">
+            <h3>Поздравляем с завершением курса!</h3>
+            <p>Вы прошли большой путь от основ <code>pytest</code> до продвинутых техник тестирования современного
+                веб-сервиса.</p>
+            <p><strong>Что вы изучили:</strong></p>
+            <ul>
+                <li><strong>Урок 1:</strong> Настроили профессиональное тестовое окружение.</li>
+                <li><strong>Урок 2:</strong> Научились писать интеграционные тесты для API.</li>
+                <li><strong>Урок 3:</strong> Освоили фикстуры <code>pytest</code> для создания надежных и изолированных
+                    тестов с реальной базой данных.</li>
+                <li><strong>Урок 4:</strong> Разделили код на слои и научились писать быстрые юнит-тесты для
+                    бизнес-логики и валидации Pydantic.</li>
+                <li><strong>Урок 5:</strong> Овладели техникой мокирования для изоляции кода от внешних зависимостей и
+                    тестирования граничных случаев.</li>
+            </ul>
+            <p>Теперь у вас есть все необходимые знания и навыки, чтобы писать качественные, поддерживаемые и надежные
+                тесты для ваших Python-проектов. Удачи в разработке!</p>
+        </div>
+    </div>
+
+</body>
+
+</html>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Урок 2: Первые тесты для FastAPI и работа с TestClient</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Roboto+Mono&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.7;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2em;
+            padding: 2em;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-weight: 700;
+            color: #0056b3;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            border-bottom: none;
+        }
+
+        h2 {
+            font-size: 2em;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: #17a2b8;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        code {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #e9ecef;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: #f1f3f5;
+            border-radius: 5px;
+            padding: 1em;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 0.95em;
+        }
+
+        .code-header {
+            background-color: #343a40;
+            color: #ffffff;
+            padding: 0.5em 1em;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .code-block {
+            margin-bottom: 1.5em;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .bash .code-header::before {
+            content: '$ ';
+            color: #6c757d;
+        }
+
+        .alert {
+            padding: 1em;
+            margin-bottom: 1em;
+            border: 1px solid transparent;
+            border-radius: .25rem;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+
+        strong {
+            color: #c7254e;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Курс: Тестирование FastAPI с Pytest</h1>
+        <h2>Урок 2: Первые тесты для FastAPI и работа с TestClient</h2>
+        <p>На этом уроке мы напишем первые интеграционные тесты для эндпоинтов FastAPI, используя
+            <code>TestClient</code>. Это позволит нам отправлять HTTP-запросы к нашему приложению и проверять ответы, не
+            запуская реальный веб-сервер.</p>
+
+        <h3>Шаг 1: Что такое <code>TestClient</code>?</h3>
+        <p><code>TestClient</code> из <code>fastapi.testclient</code> — это инструмент для тестирования FastAPI
+            приложений. Он построен на базе популярной библиотеки <code>httpx</code> и позволяет:</p>
+        <ul>
+            <li>Отправлять запросы к приложению так, как будто оно запущено на сервере, но <strong>без реального запуска
+                    сервера</strong>. Все запросы обрабатываются в памяти, что делает тесты очень быстрыми.</li>
+            <li>Использовать удобный API с методами <code>.get()</code>, <code>.post()</code>, <code>.put()</code>,
+                <code>.delete()</code> и т.д.</li>
+            <li>Автоматически обрабатывать асинхронный код FastAPI в синхронном стиле, что упрощает написание тестов.
+            </li>
+        </ul>
+
+        <h3>Шаг 2: Обновляем наше FastAPI приложение</h3>
+        <p>Давайте добавим несколько новых эндпоинтов в <code>src/main.py</code>, чтобы у нас было больше сценариев для
+            тестирования. На этом этапе мы будем использовать простое "фейковое" хранилище в виде списка, чтобы
+            имитировать работу с данными, не подключая пока настоящую базу данных.</p>
+        <div class="code-block">
+            <div class="code-header">src/main.py</div>
+            <pre><code>from fastapi import FastAPI, HTTPException, status
+from typing import List
+
+app = FastAPI(
+    title="My FastAPI Testing App"
+)
+
+# Временное хранилище данных для примера (пока без БД)
+fake_items_db = [
+    {"id": 0, "name": "Foo", "description": "A very nice Foo"},
+    {"id": 1, "name": "Bar", "description": "The Bar goes here"},
+    {"id": 2, "name": "Baz", "description": "A Baz with no description"}
+]
+
+@app.get("/")
+def read_root():
+    return {"message": "Hello, World!"}
+
+@app.get("/healthcheck")
+def healthcheck():
+    return {"status": "ok"}
+
+@app.get("/items/", response_model=List[dict])
+def read_items(skip: int = 0, limit: int = 10):
+    return fake_items_db[skip : skip + limit]
+
+@app.get("/items/{item_id}", response_model=dict)
+def read_item(item_id: int):
+    # Ищем элемент в нашем фейковом хранилище
+    item = next((item for item in fake_items_db if item["id"] == item_id), None)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Item not found"
+        )
+    return item
+</code></pre>
+        </div>
+
+        <h3>Шаг 3: Создаем файл для тестов API</h3>
+        <p>Создайте новый файл <code>tests/test_api.py</code>. В нем мы настроим <code>TestClient</code> и напишем все
+            тесты для нашего API.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_api.py</div>
+            <pre><code>from fastapi.testclient import TestClient
+from main import app # Импортируем наше FastAPI приложение
+
+# Создаем экземпляр TestClient, передавая ему наше приложение
+# Этот клиент будет использоваться для всех наших тестов
+client = TestClient(app)
+</code></pre>
+        </div>
+        <div class="alert alert-info">
+            <strong>Напоминание:</strong> Импорт <code>from main import app</code> (без <code>src.</code>) работает
+            благодаря настройке <code>pythonpath = src</code> в нашем файле <code>pytest.ini</code> из первого урока.
+        </div>
+
+        <h3>Шаг 4: Написание тестов для GET-запросов</h3>
+        <p>Теперь добавим в <code>tests/test_api.py</code> тестовые функции для проверки наших эндпоинтов. Каждый тест
+            будет выполнять запрос и проверять результат с помощью <code>assert</code>.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_api.py (дополнить)</div>
+            <pre><code>def test_read_root():
+    """Тестируем корневой эндпоинт."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Hello, World!"}
+
+def test_healthcheck():
+    """Тестируем эндпоинт проверки здоровья."""
+    response = client.get("/healthcheck")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+def test_read_all_items():
+    """Тестируем получение всех элементов."""
+    response = client.get("/items/")
+    assert response.status_code == 200
+    # Проверяем, что ответ является списком и содержит ожидаемое количество элементов
+    assert isinstance(response.json(), list)
+    assert len(response.json()) == 3 # Изначально в fake_items_db 3 элемента
+
+def test_read_items_with_skip_and_limit():
+    """Тестируем получение элементов с параметрами skip и limit."""
+    response = client.get("/items/?skip=1&limit=1")
+    assert response.status_code == 200
+    assert response.json() == [{"id": 1, "name": "Bar", "description": "The Bar goes here"}]
+
+def test_read_existing_item():
+    """Тестируем получение существующего элемента по ID."""
+    response = client.get("/items/0")
+    assert response.status_code == 200
+    assert response.json() == {"id": 0, "name": "Foo", "description": "A very nice Foo"}
+
+def test_read_non_existing_item():
+    """Тестируем получение несуществующего элемента по ID."""
+    response = client.get("/items/999") # ID, которого нет в fake_items_db
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Item not found"}
+
+def test_read_item_with_invalid_id_type():
+    """Тестируем получение элемента с некорректным типом ID."""
+    # Вместо числа передаем строку
+    response = client.get("/items/abc") 
+    # FastAPI (Pydantic) автоматически вернет 422 Unprocessable Entity
+    assert response.status_code == 422 
+</code></pre>
+        </div>
+
+        <h3>Шаг 5: Запуск тестов</h3>
+        <p>Сохраните все изменения и запустите тесты из корневой директории проекта:</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry run pytest</code></pre>
+        </div>
+        <p>Вы должны увидеть, что все тесты (и старые из <code>test_sanity.py</code>, и новые из
+            <code>test_api.py</code>) успешно прошли.</p>
+
+        <h3>Итоги урока</h3>
+        <p>На этом уроке вы научились:</p>
+        <ul>
+            <li>Использовать <code>TestClient</code> для отправки HTTP-запросов к вашему FastAPI приложению.</li>
+            <li>Писать интеграционные тесты для GET-эндпоинтов, включая работу с параметрами пути и запроса.</li>
+            <li>Проверять коды состояния HTTP (<code>status_code</code>) и JSON-ответы (<code>.json()</code>).</li>
+            <li>Тестировать как успешные сценарии (200 OK), так и сценарии с ошибками (404 Not Found, 422 Unprocessable
+                Entity).</li>
+        </ul>
+        <p>На следующем уроке мы сделаем большой шаг вперед: подключим настоящую базу данных и научимся управлять ее
+            состоянием с помощью мощных фикстур <code>pytest</code>, чтобы тестировать операции создания, обновления и
+            удаления данных.</p>
+    </div>
+
+</body>
+
+</html>

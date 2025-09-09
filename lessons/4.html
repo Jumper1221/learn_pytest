@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Урок 4: Тестирование валидации и бизнес-логики</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Roboto+Mono&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.7;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2em;
+            padding: 2em;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-weight: 700;
+            color: #0056b3;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            border-bottom: none;
+        }
+
+        h2 {
+            font-size: 2em;
+        }
+
+        h3 {
+            font-size: 1.5em;
+            color: #17a2b8;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        code {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #e9ecef;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: #f1f3f5;
+            border-radius: 5px;
+            padding: 1em;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 0.95em;
+        }
+
+        .code-header {
+            background-color: #343a40;
+            color: #ffffff;
+            padding: 0.5em 1em;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+        }
+
+        .code-block {
+            margin-bottom: 1.5em;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .bash .code-header::before {
+            content: '$ ';
+            color: #6c757d;
+        }
+
+        .alert {
+            padding: 1em;
+            margin-bottom: 1em;
+            border: 1px solid transparent;
+            border-radius: .25rem;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+
+        strong {
+            color: #c7254e;
+        }
+
+        ul {
+            padding-left: 20px;
+        }
+
+        li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>Курс: Тестирование FastAPI с Pytest</h1>
+        <h2>Урок 4: Тестирование валидации с Pydantic и бизнес-логики</h2>
+        <p>До сих пор мы писали <strong>интеграционные тесты</strong>, которые проверяли работу нескольких частей
+            системы вместе. Теперь мы сфокусируемся на <strong>юнит-тестах</strong>, которые проверяют одну, самую
+            маленькую единицу кода (функцию или класс) в полной изоляции. Это делает тесты невероятно быстрыми и
+            точными.</p>
+
+        <h3>Шаг 1: Рефакторинг — выделение сервисного слоя</h3>
+        <p>Хорошая практика — не писать сложную логику прямо в эндпоинтах. Эндпоинты должны отвечать за HTTP-аспекты, а
+            вся работа с данными и бизнес-правила должны быть вынесены в отдельный <strong>"сервисный слой"</strong>.
+            Это делает код чище и гораздо проще для юнит-тестирования.</p>
+
+        <h4>1. Создаем сервисный слой</h4>
+        <p>Создайте новый файл <code>src/services.py</code> и перенесите в него всю логику работы с SQLAlchemy из
+            <code>main.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">src/services.py</div>
+            <pre><code>from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+
+from models import Item
+from schemas import ItemCreate
+
+async def get_item_by_id(item_id: int, db: AsyncSession) -> Item | None:
+    """Получает один элемент по его ID."""
+    result = await db.execute(select(Item).where(Item.id == item_id))
+    return result.scalar_one_or_none()
+
+async def get_all_items(db: AsyncSession, skip: int = 0, limit: int = 10) -> list[Item]:
+    """Получает список всех элементов."""
+    result = await db.execute(select(Item).offset(skip).limit(limit))
+    return list(result.scalars().all())
+
+async def create_new_item(item_data: ItemCreate, db: AsyncSession) -> Item:
+    """Создает новый элемент в базе данных."""
+    db_item = Item(name=item_data.name, description=item_data.description)
+    db.add(db_item)
+    await db.commit()
+    await db.refresh(db_item)
+    return db_item</code></pre>
+        </div>
+
+        <h4>2. Обновляем эндпоинты</h4>
+        <p>Теперь обновите <code>src/main.py</code>, чтобы он использовал функции из сервисного слоя. Эндпоинты станут
+            очень "тонкими" и читаемыми.</p>
+        <div class="code-block">
+            <div class="code-header">src/main.py</div>
+            <pre><code>from fastapi import FastAPI, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+
+# Импортируем сервисы и остальное
+import services
+from database import get_async_session
+from models import Item
+from schemas import ItemCreate, ItemRead
+
+app = FastAPI(title="My FastAPI Testing App")
+
+@app.post("/items/", response_model=ItemRead, status_code=status.HTTP_201_CREATED)
+async def create_item_endpoint(item: ItemCreate, db: AsyncSession = Depends(get_async_session)):
+    return await services.create_new_item(item_data=item, db=db)
+
+@app.get("/items/", response_model=List[ItemRead])
+async def read_items_endpoint(skip: int = 0, limit: int = 10, db: AsyncSession = Depends(get_async_session)):
+    return await services.get_all_items(db=db, skip=skip, limit=limit)
+
+@app.get("/items/{item_id}", response_model=ItemRead)
+async def read_item_endpoint(item_id: int, db: AsyncSession = Depends(get_async_session)):
+    db_item = await services.get_item_by_id(item_id=item_id, db=db)
+    if db_item is None:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return db_item</code></pre>
+        </div>
+        <div class="alert alert-info">
+            <strong>Проверка:</strong> После этого рефакторинга запустите ваши старые API тесты
+            (<code>poetry run pytest tests/test_api.py</code>). Они все должны пройти, что подтверждает, что вы ничего
+            не сломали.
+        </div>
+
+        <h3>Шаг 2: Юнит-тестирование сервисного слоя</h3>
+        <p>Теперь мы можем протестировать нашу бизнес-логику напрямую, не используя HTTP-клиент. Это быстрее и позволяет
+            точнее определить источник ошибки. Мы можем переиспользовать нашу фикстуру <code>session</code> из
+            <code>conftest.py</code>!</p>
+        <p>Создайте новый файл <code>tests/test_services.py</code>.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_services.py</div>
+            <pre><code>import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+import services
+from schemas import ItemCreate
+
+# Помечаем все тесты в этом файле как асинхронные
+pytestmark = pytest.mark.asyncio
+
+async def test_create_new_item(session: AsyncSession):
+    """Тестируем функцию создания элемента."""
+    item_data = ItemCreate(name="Test Service Item", description="A cool item")
+    
+    # Вызываем сервисную функцию напрямую
+    new_item = await services.create_new_item(item_data=item_data, db=session)
+
+    assert new_item.id is not None
+    assert new_item.name == "Test Service Item"
+    assert new_item.description == "A cool item"
+
+async def test_get_item_by_id(session: AsyncSession):
+    """Тестируем функцию получения элемента по ID."""
+    # Сначала создадим элемент, чтобы было что получать
+    item_data = ItemCreate(name="Item to get", description="Details")
+    new_item = await services.create_new_item(item_data=item_data, db=session)
+    
+    # Получаем его через сервисную функцию
+    retrieved_item = await services.get_item_by_id(item_id=new_item.id, db=session)
+
+    assert retrieved_item is not None
+    assert retrieved_item.id == new_item.id
+    assert retrieved_item.name == "Item to get"
+
+async def test_get_item_by_id_not_found(session: AsyncSession):
+    """Тестируем получение несуществующего элемента."""
+    retrieved_item = await services.get_item_by_id(item_id=999, db=session)
+    assert retrieved_item is None</code></pre>
+        </div>
+
+        <h3>Шаг 3: Тестирование валидации Pydantic</h3>
+        <p>Представим, что у нас есть бизнес-правило: "название предмета не может быть 'Cursed' и описание не должно
+            быть таким же, как название". Мы можем реализовать это с помощью валидаторов Pydantic.</p>
+
+        <h4>1. Добавляем валидаторы в схемы</h4>
+        <p>Обновите <code>src/schemas.py</code>, добавив валидаторы.</p>
+        <div class="code-block">
+            <div class="code-header">src/schemas.py</div>
+            <pre><code>from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+class ItemBase(BaseModel):
+    name: str
+    description: str | None = None
+
+class ItemCreate(ItemBase):
+    
+    @field_validator("name")
+    @classmethod
+    def name_must_not_be_cursed(cls, v: str) -> str:
+        if "cursed" in v.lower():
+            raise ValueError("Item name cannot contain 'cursed'")
+        return v
+
+    @model_validator(mode='after')
+    def name_and_description_cannot_be_the_same(self) -> 'ItemCreate':
+        if self.name is not None and self.description is not None:
+            if self.name.lower() == self.description.lower():
+                raise ValueError("Name and description cannot be the same")
+        return self
+
+class ItemRead(ItemBase):
+    id: int
+    
+    model_config = ConfigDict(from_attributes=True)</code></pre>
+        </div>
+
+        <h4>2. Пишем тесты для валидаторов</h4>
+        <p>Создайте новый файл <code>tests/test_schemas.py</code>. Здесь нам понадобится <code>pytest.raises</code> —
+            специальный инструмент для проверки того, что код вызывает ожидаемое исключение.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_schemas.py</div>
+            <pre><code>import pytest
+from pydantic import ValidationError
+from schemas import ItemCreate
+
+def test_item_create_success():
+    """Тест успешного создания схемы ItemCreate."""
+    item = ItemCreate(name="Valid Name", description="Valid description")
+    assert item.name == "Valid Name"
+    assert item.description == "Valid description"
+
+def test_item_create_cursed_name_fails():
+    """Тест провала валидации, если имя содержит 'Cursed'."""
+    with pytest.raises(ValidationError) as exc_info:
+        ItemCreate(name="A Cursed Sword", description="Very shiny")
+    
+    # Проверяем, что в сообщении об ошибке есть нужный текст
+    assert "Item name cannot contain 'cursed'" in str(exc_info.value)
+
+def test_item_create_same_name_and_description_fails():
+    """Тест провала валидации, если имя и описание совпадают."""
+    with pytest.raises(ValidationError) as exc_info:
+        ItemCreate(name="Repetitive", description="Repetitive")
+    
+    assert "Name and description cannot be the same" in str(exc_info.value)
+
+def test_item_create_no_description_success():
+    """Тест успешного создания, когда описание отсутствует."""
+    item = ItemCreate(name="Just a name")
+    assert item.name == "Just a name"
+    assert item.description is None</code></pre>
+        </div>
+
+        <h3>Шаг 4: Запуск всех тестов</h3>
+        <p>Теперь вы можете запустить все тесты в проекте сразу. Pytest автоматически обнаружит все новые файлы.</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry run pytest</code></pre>
+        </div>
+        <p>Вы увидите, как тесты для схем и сервисов выполняются практически мгновенно, так как они не требуют
+            HTTP-запросов.</p>
+
+        <h3>Итоги урока</h3>
+        <p>Вы разделили интеграционные и юнит-тесты, что является ключевой практикой в профессиональной разработке.</p>
+        <ul>
+            <li>Вы научились выносить бизнес-логику в <strong>сервисный слой</strong>, что улучшило архитектуру и
+                тестируемость приложения.</li>
+            <li>Вы написали быстрые <strong>юнит-тесты</strong> для сервисного слоя, переиспользуя фикстуры для работы с
+                БД.</li>
+            <li>Вы освоили тестирование моделей Pydantic, включая проверку кастомных валидаторов с помощью
+                <strong><code>pytest.raises</code></strong>.</li>
+        </ul>
+        <p>На заключительном, пятом уроке мы рассмотрим, как тестировать код, который зависит от внешних систем
+            (например, другого API), с помощью мокирования.</p>
+    </div>
+
+</body>
+
+</html>

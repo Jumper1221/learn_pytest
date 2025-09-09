@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Урок 1: Основы Pytest и настройка окружения</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Roboto+Mono&display=swap');
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            line-height: 1.7;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 2em;
+            padding: 2em;
+            background-color: #ffffff;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        h1, h2, h3 {
+            font-weight: 700;
+            color: #0056b3;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 0.3em;
+            margin-top: 1.5em;
+        }
+        
+        h1 {
+            font-size: 2.5em;
+            text-align: center;
+            border-bottom: none;
+        }
+        
+        h2 {
+            font-size: 2em;
+        }
+        
+        h3 {
+            font-size: 1.5em;
+            color: #17a2b8;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        code {
+            font-family: 'Roboto Mono', monospace;
+            background-color: #e9ecef;
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: #f1f3f5;
+            border-radius: 5px;
+            padding: 1em;
+            overflow-x: auto;
+            border: 1px solid #dee2e6;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            font-size: 0.95em;
+        }
+
+        .code-header {
+            background-color: #343a40;
+            color: #ffffff;
+            padding: 0.5em 1em;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+        }
+        
+        .code-block {
+            margin-bottom: 1.5em;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        
+        .bash .code-header::before {
+            content: '$ ';
+            color: #6c757d;
+        }
+
+        .alert {
+            padding: 1em;
+            margin-bottom: 1em;
+            border: 1px solid transparent;
+            border-radius: .25rem;
+        }
+
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        
+        .alert-warning {
+            color: #856404;
+            background-color: #fff3cd;
+            border-color: #ffeeba;
+        }
+        
+        strong {
+            color: #c7254e;
+        }
+        
+        ul {
+            padding-left: 20px;
+        }
+        
+        li {
+            margin-bottom: 0.5em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Курс: Тестирование FastAPI с Pytest</h1>
+        <h2>Урок 1: Основы Pytest и настройка тестового окружения</h2>
+        <p>На этом уроке мы заложим фундамент. Вы познакомитесь с <code>pytest</code>, его основными концепциями и синтаксисом. Мы подготовим структуру проекта и настроим полностью изолированное тестовое окружение с отдельной базой данных PostgreSQL.</p>
+
+        <h3>Шаг 1: Что такое Pytest и почему именно он?</h3>
+        <p><code>pytest</code> — это фреймворк для тестирования на Python, который стал стандартом де-факто в сообществе. Его главные преимущества:</p>
+        <ul>
+            <li><strong>Простота и лаконичность:</strong> Тесты на <code>pytest</code> — это обычные функции Python. Для проверок используется стандартный оператор <code>assert</code>.</li>
+            <li><strong>Мощные фикстуры:</strong> Элегантный механизм для управления состоянием тестов (например, подключение к БД).</li>
+            <li><strong>Автоматическое обнаружение тестов:</strong> <code>pytest</code> сам находит тестовые файлы (<code>test_*.py</code>) и функции (<code>test_*</code>).</li>
+            <li><strong>Огромная экосистема плагинов:</strong> Множество плагинов для расширения функциональности.</li>
+        </ul>
+
+        <h3>Шаг 2: Структура проекта</h3>
+        <p>Правильная организация файлов — ключ к поддерживаемому проекту. Создадим базовую структуру с помощью следующих команд в терминале:</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>mkdir fastapi_testing_project
+cd fastapi_testing_project
+mkdir src
+mkdir tests
+touch src/main.py
+touch src/config.py
+touch tests/test_sanity.py</code></pre>
+        </div>
+        <p>В итоге у вас должна получиться такая структура:</p>
+        <div class="code-block">
+            <div class="code-header">Структура проекта</div>
+            <pre><code>fastapi_testing_project/
+├── src/
+│   ├── main.py
+│   └── config.py
+└── tests/
+    └── test_sanity.py</code></pre>
+        </div>
+
+        <h3>Шаг 3: Установка зависимостей с Poetry</h3>
+        <p>Мы будем использовать <code>poetry</code> для управления зависимостями. Сначала инициализируем проект:</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry init -n</code></pre>
+        </div>
+        <p>Теперь добавим основные зависимости для нашего FastAPI сервиса:</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry add "fastapi" "uvicorn[standard]" "sqlalchemy[asyncpg]" "pydantic-settings" "pydantic" "python-dotenv" "asyncpg"</code></pre>
+        </div>
+        <p>И зависимости, которые нужны только для разработки и тестирования:</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry add --group dev "pytest" "httpx" "pytest-asyncio"</code></pre>
+        </div>
+
+        <h3>Шаг 4: Создание базового FastAPI приложения</h3>
+        <p>Откройте файл <code>src/main.py</code> и добавьте в него минимальное приложение, чтобы убедиться, что наша базовая настройка работает.</p>
+        <div class="code-block">
+            <div class="code-header">src/main.py</div>
+            <pre><code>from fastapi import FastAPI
+
+app = FastAPI(
+    title="My FastAPI Testing App"
+)
+
+@app.get("/")
+def read_root():
+    return {"message": "Hello, World!"}
+
+@app.get("/healthcheck")
+def healthcheck():
+    return {"status": "ok"}</code></pre>
+        </div>
+        
+        <h3>Шаг 5: Написание первого "Sanity Check" теста</h3>
+        <p>Теперь напишем наш первый простой тест в файле <code>tests/test_sanity.py</code>. Он не будет проверять логику приложения, а лишь убедится, что <code>pytest</code> в принципе работает.</p>
+        <div class="code-block">
+            <div class="code-header">tests/test_sanity.py</div>
+            <pre><code>import pytest
+
+def test_example():
+    assert 1 == 1
+
+def test_addition():
+    assert 2 + 2 == 4</code></pre>
+        </div>
+        
+        <h3>Шаг 6: Запуск тестов</h3>
+        <p>Находясь в корневой директории проекта, выполните в терминале команду:</p>
+        <div class="code-block bash">
+            <div class="code-header">Терминал</div>
+            <pre><code>poetry run pytest</code></pre>
+        </div>
+        <p>Вы должны увидеть примерно следующий вывод, говорящий об успешном прохождении двух тестов.</p>
+        
+        <h3>Шаг 7: Настройка изолированного окружения</h3>
+        <p>Это критически важный шаг. Тесты никогда не должны выполняться на реальной базе данных.</p>
+        
+        <div class="alert alert-warning">
+            <strong>Внимание!</strong> Тесты должны быть полностью изолированы. Мы создадим отдельную базу данных и отдельный конфигурационный файл специально для тестов.
+        </div>
+        
+        <h4>1. Создание баз данных</h4>
+        <p>Создайте две базы данных в PostgreSQL:</p>
+        <div class="code-block">
+            <div class="code-header">SQL</div>
+            <pre><code>CREATE DATABASE app_db;
+CREATE DATABASE test_app_db;</code></pre>
+        </div>
+        
+        <h4>2. Конфигурационные файлы</h4>
+        <p>Создайте два файла в корне проекта: <code>.env</code> (для разработки) и <code>.env.test</code> (для тестов). Замените <code>user:password</code> на ваши реальные данные.</p>
+        
+        <div class="code-block">
+            <div class="code-header">.env</div>
+            <pre><code>DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/app_db"</code></pre>
+        </div>
+        
+        <div class="code-block">
+            <div class="code-header">.env.test</div>
+            <pre><code>DATABASE_URL="postgresql+asyncpg://user:password@localhost:5432/test_app_db"</code></pre>
+        </div>
+
+        <p>Теперь настроим Pydantic на чтение этих переменных. Откройте <code>src/config.py</code>:</p>
+        <div class="code-block">
+            <div class="code-header">src/config.py</div>
+            <pre><code>from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
+
+# Определяем, какой .env файл использовать
+env_file = ".env.test" if os.getenv("TESTING") else ".env"
+
+class Settings(BaseSettings):
+    DATABASE_URL: str
+
+    model_config = SettingsConfigDict(env_file=env_file, extra='ignore')
+
+settings = Settings()</code></pre>
+        </div>
+        <div class="alert alert-info">
+            <strong>Примечание:</strong> Мы добавили небольшую логику для автоматического выбора <code>.env.test</code>, если будет установлена переменная окружения <code>TESTING</code>. Pytest будет делать это за нас.
+        </div>
+        
+        <h4>3. Конфигурация Pytest</h4>
+        <p>В корне проекта создайте файл <code>pytest.ini</code>. Этот файл содержит финальные, исправленные настройки, которые решают проблемы с импортами и делают вывод тестов подробным.</p>
+        <div class="code-block">
+            <div class="code-header">pytest.ini</div>
+            <pre><code>[pytest]
+minversion = 6.0
+addopts = -ra -v
+testpaths = tests
+python_files = test_*.py
+pythonpath = src
+env =
+    TESTING=True</code></pre>
+        </div>
+        <ul>
+            <li><code>addopts = -ra -v</code>: Включает подробный (verbose) режим вывода.</li>
+            <li><code>pythonpath = src</code>: <strong>Ключевая настройка!</strong> Говорит Pytest, что папка <code>src</code> является корневой для импортов, решая проблему <code>ModuleNotFoundError</code>.</li>
+            <li><code>env = TESTING=True</code>: Устанавливает переменную окружения, чтобы наш <code>config.py</code> автоматически подхватил настройки из <code>.env.test</code>.</li>
+        </ul>
+        
+        <h3>Итоги урока</h3>
+        <p>Поздравляем! Вы проделали всю подготовительную работу: разобрались с <code>pytest</code>, создали структуру проекта, установили зависимости и, самое главное, подготовили полностью изолированное тестовое окружение. Теперь мы готовы к написанию тестов для нашего FastAPI приложения.</p>
+    </div>
+
+</body>
+</html>
