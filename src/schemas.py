@@ -22,8 +22,9 @@ class ItemCreate(ItemBase):
         return self
 
 
+# src/schemas.py (дополнить)
 class ItemRead(ItemBase):
     id: int
+    price_eur: float | None = None  # Новое поле для цены в евро
 
-    # Нотация для Pydantic V2
     model_config = ConfigDict(from_attributes=True)
